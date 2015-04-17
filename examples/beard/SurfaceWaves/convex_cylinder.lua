@@ -6,10 +6,10 @@ sin = math.sin
 
 output_prefix = "convex_cylinder"
 data_directory = "data"
-elem_order = 4
+elem_order = 16
 max_level = 0
 min_level = 0
-static_refinement=1
+static_refinement=0
 
 mesh_file = "/home/jekozdon/codes/bfam/examples/beard/SurfaceWaves/convex_cylinder.inp"
 
@@ -143,8 +143,8 @@ BI = {{0.259859421131935    ,0.551757806713995    ,-1.111726166772277    ,0.9584
       {1.800969171774775e-05,1.608778558352172e-04,-5.996559491070863e-04,0.002791241585515    ,-0.010369491587158    },
       {1.946610327968597e-08,1.791032555369920e-07,-6.806632052120861e-07,3.250907109941674e-06,-1.252501580039413e-05}}
 
-KI = 1
-KJ = 1
+KI = 4
+KJ = 5
 
 mu    = MU[KI]
 
@@ -165,15 +165,13 @@ CW = {
 -- time stepper to use
 lsrk_method  = "KC54"
 
-tend   = 2*pi/CW.omega
-tend = 2
-tout   = tend
-tdisp  = tend
+tend   = 12*pi/CW.omega
+-- tend = 2
+tout   = -1
 -- nerr   = 0
 function nerr(dt)
-  return terr/dt
+  return tend/60/dt
 end
-terr  = tend
 
 T = tout
 
@@ -183,7 +181,7 @@ function time_step_parameters(dt)
   dt = T / N
 
   nsteps     = tend / dt
-  ndisp      = tdisp / dt
+  ndisp      = tend / 60 / dt
   noutput    = tout  / dt
   nstations  = -1
   nfoutput   = -1

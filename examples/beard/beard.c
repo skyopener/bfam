@@ -3458,6 +3458,29 @@ static bfam_real_t compute_energy(beard_t *beard, prefs_t *prefs, bfam_real_t t,
   return energy;
 }
 
+static bfam_real_t compute_max(beard_t *beard, prefs_t *prefs,
+                               const char *field, const char *prefix)
+{
+  const char *tags[] = {"_volume", NULL};
+  bfam_subdomain_t *subs[beard->domain->base.numSubdomains];
+  bfam_locidx_t num_subs = 0;
+  bfam_domain_get_subdomains((bfam_domain_t *)beard->domain, BFAM_DOMAIN_OR,
+                             tags, beard->domain->base.numSubdomains, subs,
+                             &num_subs);
+  bfam_real_t max_val = 0;
+  bfam_real_t max_local = 0;
+  for (bfam_locidx_t s = 0; s < num_subs; s++)
+  {
+    bfam_subdomain_dgx_t *sub = (bfam_subdomain_dgx_t *)subs[s];
+    BFAM_LOAD_FIELD_RESTRICT_ALIGNED(v, prefix, field, &sub->base.fields);
+    for (bfam_locidx_t n = 0; n < sub->K * sub->Np; n++)
+      max_local = BFAM_MAX(max_local, BFAM_REAL_ABS(v[n]));
+  }
+  BFAM_MPI_CHECK(MPI_Reduce(&max_local, &max_val, 1, BFAM_REAL_MPI, MPI_SUM, 0,
+                            beard->mpicomm));
+  return max_val;
+}
+
 typedef struct check_error_args
 {
   char *field_prefix;
@@ -3947,6 +3970,8 @@ static void run_simulation(beard_t *beard, prefs_t *prefs)
       err_args.L = prefs->L;
       char prefix[] = "";
       err_args.field_prefix = prefix;
+      const char *err_flds_[] = {"v1",  "v2",  "v3",  "S11", "S22",
+                                 "S33", "S12", "S13", "S23", NULL};
       const char *err_flds[] = {
           "error_v1",  "error_v2",  "error_v3",  "error_S11", "error_S22",
           "error_S33", "error_S12", "error_S13", "error_S23", NULL};
@@ -3954,12 +3979,21 @@ static void run_simulation(beard_t *beard, prefs_t *prefs)
         bfam_domain_init_field((bfam_domain_t *)beard->domain, BFAM_DOMAIN_OR,
                                volume_vtk_tags, err_flds[f], time, check_error,
                                &err_args);
-      bfam_real_t error = compute_energy(beard, prefs, time, "error_");
+      bfam_real_t error =
+          compute_energy(beard, prefs, time, "error_") / initial_energy;
       bfam_real_t new_energy = compute_energy(beard, prefs, time, "");
       BFAM_ROOT_INFO("time: %" BFAM_REAL_FMTe " error: %" BFAM_REAL_FMTe
                      " d_energy: %" BFAM_REAL_FMTe,
                      time, error,
                      (new_energy - initial_energy) / initial_energy);
+
+      for (int f = 0; err_flds[f] != NULL; f++)
+      {
+        bfam_real_t max_err = compute_max(beard, prefs, err_flds[f], "");
+        bfam_real_t max_val = compute_max(beard, prefs, err_flds_[f], "");
+        BFAM_ROOT_INFO("max : %s : %" BFAM_REAL_FMTe, err_flds[f],
+                       max_err / max_val);
+      }
       if (noutput > 0)
       {
         char err_output[BFAM_BUFSIZ];
