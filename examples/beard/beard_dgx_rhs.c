@@ -2278,6 +2278,15 @@ void beard_dgx_inter_rhs_ageing_law_interface(
       BFAM_LOAD_FIELD_RESTRICT_ALIGNED(n3, "", "_grid_nx2", fields_face));
   BFAM_LOAD_FIELD_RESTRICT_ALIGNED(sJ, "", "_grid_sJ", fields_face);
 
+  BFAM_LOAD_FIELD_RESTRICT_ALIGNED(n1_g, "", "_grid_nx0", fields_m);
+  BFAM_LOAD_FIELD_RESTRICT_ALIGNED(n2_g, "", "_grid_nx1", fields_m);
+  BEARD_D3_OP(
+      BFAM_LOAD_FIELD_RESTRICT_ALIGNED(n3_g, "", "_grid_nx2", fields_m));
+
+  BFAM_LOAD_FIELD_RESTRICT_ALIGNED(x1_g, "", "_grid_x0", fields_g);
+  BFAM_LOAD_FIELD_RESTRICT_ALIGNED(x2_g, "", "_grid_x1", fields_g);
+  BEARD_D3_OP(BFAM_LOAD_FIELD_RESTRICT_ALIGNED(x3_g, "", "_grid_x2", fields_g));
+
   BFAM_LOAD_FIELD_RESTRICT_ALIGNED(Zs_M, "", "Zs", fields_m);
   BFAM_LOAD_FIELD_RESTRICT_ALIGNED(Zp_M, "", "Zp", fields_m);
   BFAM_LOAD_FIELD_RESTRICT_ALIGNED(Zs_P, "", "Zs", fields_p);
@@ -2362,41 +2371,70 @@ void beard_dgx_inter_rhs_ageing_law_interface(
       bfam_real_t vpM[] = {vp1_M[iG], vp2_M[iG], vp3_M[iG]};
       bfam_real_t vnM = vn_M[iG];
 
-      /* now add the real flux */
-      /* Setup stuff for the plus side */
-      bfam_real_t ZsP = Zs_P[iG];
-      bfam_real_t ZpP = Zp_P[iG];
-
-      bfam_real_t TpP[] = {Tp1_P[iG], Tp2_P[iG], Tp3_P[iG]};
-      bfam_real_t TnP = Tn_P[iG];
-
-      bfam_real_t vpP[] = {vp1_P[iG], vp2_P[iG], vp3_P[iG]};
-      bfam_real_t vnP = vn_P[iG];
-
-      /* compute the flux assume a locked fault */
-      beard_dgx_upwind_state_m(&TnS_g[pnt], &TpS_g[3 * pnt], &vnS_g[pnt],
-                               &vpS_g[3 * pnt], TnM, TnP, TpM, TpP, vnM, vnP,
-                               vpM, vpP, ZpM, ZpP, ZsM, ZsP);
-
-      /* We add pf since our normal stress is negative in compression */
-      Tn[iG] = TnS_g[pnt] + Tn_0[iG] + pf_0[iG];
-      if (NO_OPENING && Tn[iG] > 0)
+      if (user_bc_func)
       {
-        BFAM_LOAD_FIELD_RESTRICT_ALIGNED(x, "", "_grid_x0", fields_g);
-        BFAM_LOAD_FIELD_RESTRICT_ALIGNED(y, "", "_grid_x1", fields_g);
+
+        /* now add the real flux */
+        /* Setup stuff for the plus side */
+        bfam_real_t ZsP = Zs_P[iG];
+        bfam_real_t ZpP = Zp_P[iG];
+
+        bfam_real_t TpP[] = {Tp1_P[iG], Tp2_P[iG], Tp3_P[iG]};
+        bfam_real_t TnP = Tn_P[iG];
+
+        bfam_real_t vpP[] = {vp1_P[iG], vp2_P[iG], vp3_P[iG]};
+        bfam_real_t vnP = vn_P[iG];
+
+        const bfam_real_t xM[] = {x1_g[iG], x2_g[iG],
+                                  BEARD_D3_AP(0, +x3_g[iG])};
+        const bfam_real_t nM[] = {n1_g[iG], n2_g[iG],
+                                  BEARD_D3_AP(0, +n3_g[iG])};
+        user_bc_func(sub_g->base.uid, t, xM, nM, TpP, &TnP, vpP, &vnP,
+                     user_data);
+
+        /* compute the flux assume a locked fault */
+        beard_dgx_upwind_state_m(&TnS_g[pnt], &TpS_g[3 * pnt], &vnS_g[pnt],
+                                 &vpS_g[3 * pnt], TnM, TnP, TpM, TpP, vnM, vnP,
+                                 vpM, vpP, ZpM, ZpP, ZsM, ZsP);
+      }
+      else
+      {
+        /* now add the real flux */
+        /* Setup stuff for the plus side */
+        bfam_real_t ZsP = Zs_P[iG];
+        bfam_real_t ZpP = Zp_P[iG];
+
+        bfam_real_t TpP[] = {Tp1_P[iG], Tp2_P[iG], Tp3_P[iG]};
+        bfam_real_t TnP = Tn_P[iG];
+
+        bfam_real_t vpP[] = {vp1_P[iG], vp2_P[iG], vp3_P[iG]};
+        bfam_real_t vnP = vn_P[iG];
+
+        /* compute the flux assume a locked fault */
+        beard_dgx_upwind_state_m(&TnS_g[pnt], &TpS_g[3 * pnt], &vnS_g[pnt],
+                                 &vpS_g[3 * pnt], TnM, TnP, TpM, TpP, vnM, vnP,
+                                 vpM, vpP, ZpM, ZpP, ZsM, ZsP);
+
+        /* We add pf since our normal stress is negative in compression */
+        Tn[iG] = TnS_g[pnt] + Tn_0[iG] + pf_0[iG];
+        if (NO_OPENING && Tn[iG] > 0)
+        {
+          BFAM_LOAD_FIELD_RESTRICT_ALIGNED(x, "", "_grid_x0", fields_g);
+          BFAM_LOAD_FIELD_RESTRICT_ALIGNED(y, "", "_grid_x1", fields_g);
 #if DIM == 2
-        BFAM_ABORT("fault opening not implemented: point"
-                   " %" BFAM_REAL_FMTe " %" BFAM_REAL_FMTe,
-                   x[iG], y[iG]);
+          BFAM_ABORT("fault opening not implemented: point"
+                     " %" BFAM_REAL_FMTe " %" BFAM_REAL_FMTe,
+                     x[iG], y[iG]);
 #elif DIM == 3
-        BFAM_LOAD_FIELD_RESTRICT_ALIGNED(z, "", "_grid_x2", fields_g);
-        BFAM_ABORT("fault opening not implemented: point"
-                   " %" BFAM_REAL_FMTe " %" BFAM_REAL_FMTe " %" BFAM_REAL_FMTe,
-                   x[iG], y[iG], z[iG]);
+          BFAM_LOAD_FIELD_RESTRICT_ALIGNED(z, "", "_grid_x2", fields_g);
+          BFAM_ABORT("fault opening not implemented: point"
+                     " %" BFAM_REAL_FMTe " %" BFAM_REAL_FMTe
+                     " %" BFAM_REAL_FMTe,
+                     x[iG], y[iG], z[iG]);
 #else
 #error "invalid DIM"
 #endif
-      }
+        }
 
 /*
  * Call bracketed Newton solver to solve:
@@ -2414,35 +2452,36 @@ void beard_dgx_inter_rhs_ageing_law_interface(
       const bfam_real_t Sfric = 0;
 #endif
 
-      bfam_real_t VpS[3];
-      const bfam_real_t Tp0[] = {Tp1_0[iG], Tp2_0[iG], Tp3_0[iG]};
+        bfam_real_t VpS[3];
+        const bfam_real_t Tp0[] = {Tp1_0[iG], Tp2_0[iG], Tp3_0[iG]};
 
-      beard_dgx_upwind_state_rate_and_state_friction_m(
-          &TpS_g[3 * pnt], &vpS_g[3 * pnt], VpS, Tn[pnt], a[iG], V0[iG],
-          psi[iG], TpM, TpP, Tp0, vpM, vpP, ZsM, ZsP);
+        beard_dgx_upwind_state_rate_and_state_friction_m(
+            &TpS_g[3 * pnt], &vpS_g[3 * pnt], VpS, Tn[pnt], a[iG], V0[iG],
+            psi[iG], TpM, TpP, Tp0, vpM, vpP, ZsM, ZsP);
 
-      Vp1[iG] = VpS[0];
-      Vp2[iG] = VpS[1];
-      Vp3[iG] = VpS[2];
-      V[iG] =
-          BFAM_REAL_SQRT(VpS[0] * VpS[0] + VpS[1] * VpS[1] + VpS[2] * VpS[2]);
+        Vp1[iG] = VpS[0];
+        Vp2[iG] = VpS[1];
+        Vp3[iG] = VpS[2];
+        V[iG] =
+            BFAM_REAL_SQRT(VpS[0] * VpS[0] + VpS[1] * VpS[1] + VpS[2] * VpS[2]);
 
-      dDn[iG] += 0;
-      dDp[iG] += V[iG];
-      dDp1[iG] += Vp1[iG];
-      dDp2[iG] += Vp2[iG];
-      dDp3[iG] += Vp3[iG];
-      Tp1[iG] = TpS_g[3 * pnt + 0] + Tp1_0[iG];
-      Tp2[iG] = TpS_g[3 * pnt + 1] + Tp2_0[iG];
-      Tp3[iG] = TpS_g[3 * pnt + 2] + Tp3_0[iG];
+        dDn[iG] += 0;
+        dDp[iG] += V[iG];
+        dDp1[iG] += Vp1[iG];
+        dDp2[iG] += Vp2[iG];
+        dDp3[iG] += Vp3[iG];
+        Tp1[iG] = TpS_g[3 * pnt + 0] + Tp1_0[iG];
+        Tp2[iG] = TpS_g[3 * pnt + 1] + Tp2_0[iG];
+        Tp3[iG] = TpS_g[3 * pnt + 2] + Tp3_0[iG];
 
-      if (b[iG] > 0)
-      {
-        const bfam_real_t theta =
-            (L[iG] / V0[iG]) * BFAM_REAL_EXP((psi[iG] - f0[iG]) / b[iG]);
-        dpsi[iG] += b[iG] * (1.0 / theta - V[iG] / L[iG]);
+        if (b[iG] > 0)
+        {
+          const bfam_real_t theta =
+              (L[iG] / V0[iG]) * BFAM_REAL_EXP((psi[iG] - f0[iG]) / b[iG]);
+          dpsi[iG] += b[iG] * (1.0 / theta - V[iG] / L[iG]);
+        }
+        /* dpsi[iG] += (b[iG]/theta)*(1-V[iG]*theta/L[iG]); */
       }
-      /* dpsi[iG] += (b[iG]/theta)*(1-V[iG]*theta/L[iG]); */
 
       /* substract off the grid values */
       TpS_g[3 * pnt + 0] -= TpM[0];
