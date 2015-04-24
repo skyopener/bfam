@@ -2999,10 +2999,10 @@ static bfam_real_t lua_user_bc(bfam_locidx_t uid, bfam_long_real_t t,
   bfam_real_t S13;
   bfam_real_t S23;
 
-  int result =
-      lua_global_function_call(prefs->L, 0, "user_bc", "rrrri>rrrrrrrrr", x[0],
-                               x[1], x[2], (bfam_real_t)t, (int)uid, &v1, &v2,
-                               &v3, &S11, &S22, &S33, &S12, &S13, &S23);
+  int result = lua_global_function_call(
+      prefs->L, 0, "user_bc", "rrrrirrr>rrrrrrrrr", x[0], x[1], x[2],
+      (bfam_real_t)t, (int)uid, n[0], n[1], n[2], &v1, &v2, &v3, &S11, &S22,
+      &S33, &S12, &S13, &S23);
   BFAM_ABORT_IF_NOT(result == 0,
                     "problem with lua call to 'user_bc'"
                     "should be a function that takes (x,y,z,t,uid) "
@@ -3509,21 +3509,87 @@ static void check_error(bfam_locidx_t npoints, const char *name, bfam_real_t t,
   bfam_real_t *restrict fld = bfam_dictionary_get_value_ptr(&s->fields, fname);
   BFAM_ABORT_IF(fld == NULL, "field '%s' not in fields for %s", fname, s->name);
 
+  bfam_subdomain_dgx_t *sub = (bfam_subdomain_dgx_t *)s;
+
 #if DIM == 2
   bfam_real_t tmpz = 0;
 #endif
-  for (bfam_locidx_t n = 0; n < npoints; ++n)
+  for (bfam_locidx_t elem = 0; elem < sub->K; ++elem)
   {
+    const bfam_locidx_t off = elem * sub->Np;
+    bfam_real_t xc = 0;
+    bfam_real_t yc = 0;
+    bfam_real_t zc = 0;
+    switch (sub->dim)
+    {
+    case 1:
+      for (bfam_locidx_t ix = 0; ix < 2; ix++)
+      {
+        const bfam_locidx_t ind = +ix * (sub->N);
+        xc += x[off + ind];
+        yc += y[off + ind];
+#if DIM == 3
+        zc += z[off + ind];
+#endif
+      }
+      xc /= 2;
+      yc /= 2;
+      zc /= 2;
+      break;
+    case 2:
+      for (bfam_locidx_t iy = 0; iy < 2; iy++)
+        for (bfam_locidx_t ix = 0; ix < 2; ix++)
+        {
+          const bfam_locidx_t ind =
+              +ix * (sub->N) + iy * (sub->N) * (sub->N + 1);
+
+          xc += x[off + ind];
+          yc += y[off + ind];
+#if DIM == 3
+          zc += z[off + ind];
+#endif
+        }
+      xc /= 4;
+      yc /= 4;
+      zc /= 4;
+      break;
+    case 3:
+      for (bfam_locidx_t iz = 0; iz < 2; iz++)
+        for (bfam_locidx_t iy = 0; iy < 2; iy++)
+          for (bfam_locidx_t ix = 0; ix < 2; ix++)
+          {
+            const bfam_locidx_t ind =
+                +ix * (sub->N) + iy * (sub->N) * (sub->N + 1) +
+                iz * (sub->N) * (sub->N + 1) * (sub->N + 1);
+            xc += x[off + ind];
+            yc += y[off + ind];
+#if DIM == 3
+            zc += z[off + ind];
+#endif
+          }
+      xc /= 8;
+      yc /= 8;
+      zc /= 8;
+      break;
+    default:
+      BFAM_ABORT("Unknown dimension: %" BFAM_LOCIDX_PRId,
+                 (bfam_locidx_t)sub->dim);
+    }
+
+    for (bfam_locidx_t dof = 0; dof < sub->Np; dof++)
+    {
+      const bfam_locidx_t n = off + dof;
 #if DIM == 2
-    lua_global_function_call(L, 0, name + 6, "rrrr>r", x[n], y[n], tmpz, t,
-                             &err[n]);
+      lua_global_function_call(L, 0, name + 6, "rrrrrrr>r", x[n], y[n], tmpz, t,
+                               xc, yc, zc, &err[n]);
 #elif DIM == 3
-    lua_global_function_call(L, 0, name + 6, "rrrr>r", x[n], y[n], z[n], t,
-                             &err[n]);
+      lua_global_function_call(L, 0, name + 6, "rrrrrrr>r", x[n], y[n], z[n], t,
+                               xc, yc, zc, &err[n]);
 #else
 #error "Bad Dimension"
 #endif
-    err[n] -= fld[n];
+      err[n] -= fld[n];
+    }
   }
 }
 
