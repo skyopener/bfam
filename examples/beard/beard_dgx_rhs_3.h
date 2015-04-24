@@ -59,7 +59,8 @@
   void beard_dgx_inter_rhs_ageing_law_interface_3_##order(                     \
       int N, bfam_subdomain_dgx_t *sub, const char *rate_prefix,               \
       const char *minus_rate_prefix, const char *field_prefix,                 \
-      const bfam_long_real_t t);                                               \
+      const bfam_long_real_t t, beard_user_bc_t user_bc_func,                  \
+      void *user_data);                                                        \
   void beard_dgx_energy_3_##order(int N, bfam_real_t *energy_sq,               \
                                   bfam_subdomain_dgx_t *sub,                   \
                                   const char *field_prefix);
@@ -130,12 +131,10 @@ void beard_dgx_inter_rhs_slip_weakening_interface_3_(
     int N, bfam_subdomain_dgx_t *sub, const char *rate_prefix,
     const char *minus_rate_prefix, const char *field_prefix,
     const bfam_long_real_t t);
-void beard_dgx_inter_rhs_ageing_law_interface_3_(int N,
-                                                 bfam_subdomain_dgx_t *sub,
-                                                 const char *rate_prefix,
-                                                 const char *minus_rate_prefix,
-                                                 const char *field_prefix,
-                                                 const bfam_long_real_t t);
+void beard_dgx_inter_rhs_ageing_law_interface_3_(
+    int N, bfam_subdomain_dgx_t *sub, const char *rate_prefix,
+    const char *minus_rate_prefix, const char *field_prefix,
+    const bfam_long_real_t t, beard_user_bc_t user_bc_func, void *user_data);
 void beard_dgx_energy_3_(int N, bfam_real_t *energy_sq,
                          bfam_subdomain_dgx_t *sub, const char *field_prefix);
 

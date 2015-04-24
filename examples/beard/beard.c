@@ -2276,14 +2276,17 @@ static void domain_add_fields(beard_t *beard, prefs_t *prefs)
             friction_fields = slip_weakening_fields;
             friction_rates = slip_weakening_rates;
           }
-          else if (0 == strncmp(lua_tostring(L, -1), "ageing law", match_len))
+          else if (0 == strncmp(lua_tostring(L, -1), "ageing law", match_len) ||
+                   0 == strncmp(lua_tostring(L, -1), "ageing law force",
+                                match_len))
           {
             friction_fields = rate_and_state_fields;
             friction_rates = rate_and_state_rates;
           }
           else
             BFAM_ABORT("Uknown friction tag type: %s"
-                       " (can be: 'slip weakening', 'ageing law'",
+                       " (can be: 'slip weakening',"
+                       " 'ageing law', 'ageing law force'",
                        tag);
           BFAM_ABORT_IF_NOT(tmp_fields == NULL || friction_fields == tmp_fields,
                             "Not configured for multiple friction laws");
@@ -2905,23 +2908,24 @@ void inter_rhs_slip_weakening_interface(int N, bfam_subdomain_dgx_t *sub,
 #undef X
 }
 
-void inter_rhs_ageing_law_interface(int N, bfam_subdomain_dgx_t *sub,
-                                    const char *rate_prefix,
-                                    const char *minus_rate_prefix,
-                                    const char *field_prefix,
-                                    const bfam_long_real_t t)
+void inter_rhs_ageing_law_interface(
+    int N, bfam_subdomain_dgx_t *sub, const char *rate_prefix,
+    const char *minus_rate_prefix, const char *field_prefix,
+    const bfam_long_real_t t, beard_user_bc_t user_bc_func, void *user_data)
 {
 #if DIM == 2
 #define X(order)                                                               \
   case order:                                                                  \
     beard_dgx_inter_rhs_ageing_law_interface_2_##order(                        \
-        N, sub, rate_prefix, minus_rate_prefix, field_prefix, t);              \
+        N, sub, rate_prefix, minus_rate_prefix, field_prefix, t, user_bc_func, \
+        user_data);                                                            \
     break;
 #elif DIM == 3
 #define X(order)                                                               \
   case order:                                                                  \
     beard_dgx_inter_rhs_ageing_law_interface_3_##order(                        \
-        N, sub, rate_prefix, minus_rate_prefix, field_prefix, t);              \
+        N, sub, rate_prefix, minus_rate_prefix, field_prefix, t, user_bc_func, \
+        user_data);                                                            \
     break;
 #else
 #error "bad dimension"
@@ -2932,11 +2936,13 @@ void inter_rhs_ageing_law_interface(int N, bfam_subdomain_dgx_t *sub,
     BFAM_LIST_OF_DGX_NORDERS
   default:
 #if DIM == 2
-    beard_dgx_inter_rhs_ageing_law_interface_2_(
-        N, sub, rate_prefix, minus_rate_prefix, field_prefix, t);
+    beard_dgx_inter_rhs_ageing_law_interface_2_(N, sub, rate_prefix,
+                                                minus_rate_prefix, field_prefix,
+                                                t, user_bc_func, user_data);
 #elif DIM == 3
-    beard_dgx_inter_rhs_ageing_law_interface_3_(
-        N, sub, rate_prefix, minus_rate_prefix, field_prefix, t);
+    beard_dgx_inter_rhs_ageing_law_interface_3_(N, sub, rate_prefix,
+                                                minus_rate_prefix, field_prefix,
+                                                t, user_bc_func, user_data);
 #else
 #error "bad dimension"
 #endif
@@ -3059,12 +3065,19 @@ void inter_rhs(bfam_subdomain_t *thisSubdomain, const char *rate_prefix,
         ((bfam_subdomain_dgx_t *)sub->base.glue_m->sub_m)->N, sub, rate_prefix,
         minus_rate_prefix, field_prefix, t);
   }
+  else if (bfam_subdomain_has_tag(thisSubdomain, "ageing law force"))
+  {
+    BFAM_ASSERT(rate_prefix);
+    inter_rhs_ageing_law_interface(
+        ((bfam_subdomain_dgx_t *)sub->base.glue_m->sub_m)->N, sub, rate_prefix,
+        minus_rate_prefix, field_prefix, t, lua_user_bc, user_data);
+  }
   else if (bfam_subdomain_has_tag(thisSubdomain, "ageing law"))
   {
     BFAM_ASSERT(rate_prefix);
     inter_rhs_ageing_law_interface(
         ((bfam_subdomain_dgx_t *)sub->base.glue_m->sub_m)->N, sub, rate_prefix,
-        minus_rate_prefix, field_prefix, t);
+        minus_rate_prefix, field_prefix, t, NULL, NULL);
   }
   else if (bfam_subdomain_has_tag(thisSubdomain, "non-reflecting"))
   {

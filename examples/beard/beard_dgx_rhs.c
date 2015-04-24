@@ -2202,12 +2202,10 @@ void beard_dgx_inter_rhs_slip_weakening_interface(int inN,
   }
 }
 
-void beard_dgx_inter_rhs_ageing_law_interface(int inN,
-                                              bfam_subdomain_dgx_t *sub_g,
-                                              const char *rate_prefix,
-                                              const char *minus_rate_prefix,
-                                              const char *field_prefix,
-                                              const bfam_long_real_t t)
+void beard_dgx_inter_rhs_ageing_law_interface(
+    int inN, bfam_subdomain_dgx_t *sub_g, const char *rate_prefix,
+    const char *minus_rate_prefix, const char *field_prefix,
+    const bfam_long_real_t t, beard_user_bc_t user_bc_func, void *user_data)
 {
   GENERIC_INIT(inN, beard_dgx_inter_rhs_ageing_law_interface);
 
