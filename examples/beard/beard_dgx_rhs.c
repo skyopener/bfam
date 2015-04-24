@@ -1777,7 +1777,7 @@ void beard_dgx_inter_rhs_interface(int inN, bfam_subdomain_dgx_t *sub_g,
     BFAM_ALIGN(32) bfam_real_t vpS_m_STORAGE[3 * Nfp];
     BFAM_ALIGN(32) bfam_real_t vnS_m_STORAGE[Nfp];
 
-    /* check to tee if projection */
+    /* check to see if projection */
     /* locked */
     {
       /* set to the correct Mass times projection */
@@ -2123,7 +2123,7 @@ void beard_dgx_inter_rhs_slip_weakening_interface(int inN,
     BFAM_ALIGN(32) bfam_real_t vpS_m_STORAGE[3 * Nfp];
     BFAM_ALIGN(32) bfam_real_t vnS_m_STORAGE[Nfp];
 
-    /* check to tee if projection */
+    /* check to see if projection */
     /* locked */
     {
       /* set to the correct Mass times projection */
@@ -2408,11 +2408,11 @@ void beard_dgx_inter_rhs_ageing_law_interface(
         + (TpS_g[3*pnt+0] + Tp1_0[iG])*(TpS_g[3*pnt+0] + Tp1_0[iG])
         + (TpS_g[3*pnt+1] + Tp2_0[iG])*(TpS_g[3*pnt+1] + Tp2_0[iG])
         + (TpS_g[3*pnt+2] + Tp3_0[iG])*(TpS_g[3*pnt+2] + Tp3_0[iG]);
-#endif
 
-      // JK fc[iG] = fs[iG]-(fs[iG]-fd[iG])*BFAM_MIN(Dp[iG],Dc[iG])/Dc[iG];
-      // JK const bfam_real_t Sfric = c0[iG]-Tn[iG]*fc[iG];
-      // const bfam_real_t Sfric = 0;
+      fc[iG] = fs[iG]-(fs[iG]-fd[iG])*BFAM_MIN(Dp[iG],Dc[iG])/Dc[iG];
+      const bfam_real_t Sfric = c0[iG]-Tn[iG]*fc[iG];
+      const bfam_real_t Sfric = 0;
+#endif
 
       bfam_real_t VpS[3];
       const bfam_real_t Tp0[] = {Tp1_0[iG], Tp2_0[iG], Tp3_0[iG]};
@@ -2462,7 +2462,7 @@ void beard_dgx_inter_rhs_ageing_law_interface(
     BFAM_ALIGN(32) bfam_real_t vpS_m_STORAGE[3 * Nfp];
     BFAM_ALIGN(32) bfam_real_t vnS_m_STORAGE[Nfp];
 
-    /* check to tee if projection */
+    /* check to see if projection */
     /* locked */
     {
       /* set to the correct Mass times projection */
