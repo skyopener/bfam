@@ -2371,26 +2371,64 @@ void beard_dgx_inter_rhs_ageing_law_interface(
       bfam_real_t vpM[] = {vp1_M[iG], vp2_M[iG], vp3_M[iG]};
       bfam_real_t vnM = vn_M[iG];
 
+      /* now add the real flux */
+      /* Setup stuff for the plus side */
+      bfam_real_t ZsP = Zs_P[iG];
+      bfam_real_t ZpP = Zp_P[iG];
+
+      bfam_real_t TpP[] = {Tp1_P[iG], Tp2_P[iG], Tp3_P[iG]};
+      bfam_real_t TnP = Tn_P[iG];
+
+      bfam_real_t vpP[] = {vp1_P[iG], vp2_P[iG], vp3_P[iG]};
+      bfam_real_t vnP = vn_P[iG];
+
+#ifndef NO_MMS
+      bfam_real_t exact_TpP[3];
+      bfam_real_t exact_TnP;
+      bfam_real_t exact_vpP[3];
+      bfam_real_t exact_vnP;
+
+      bfam_real_t exact_TpM[3];
+      bfam_real_t exact_TnM;
+      bfam_real_t exact_vpM[3];
+      bfam_real_t exact_vnM;
+
+      const bfam_real_t nM[] = {n1_g[iG], n2_g[iG], BEARD_D3_AP(0, +n3_g[iG])};
+
       if (user_bc_func)
       {
-
-        /* now add the real flux */
-        /* Setup stuff for the plus side */
-        bfam_real_t ZsP = Zs_P[iG];
-        bfam_real_t ZpP = Zp_P[iG];
-
-        bfam_real_t TpP[] = {Tp1_P[iG], Tp2_P[iG], Tp3_P[iG]};
-        bfam_real_t TnP = Tn_P[iG];
-
-        bfam_real_t vpP[] = {vp1_P[iG], vp2_P[iG], vp3_P[iG]};
-        bfam_real_t vnP = vn_P[iG];
-
-        const bfam_real_t xM[] = {x1_g[iG], x2_g[iG],
+        const bfam_real_t xG[] = {x1_g[iG], x2_g[iG],
                                   BEARD_D3_AP(0, +x3_g[iG])};
-        const bfam_real_t nM[] = {n1_g[iG], n2_g[iG],
-                                  BEARD_D3_AP(0, +n3_g[iG])};
-        user_bc_func(sub_g->base.uid, t, xM, nM, TpP, &TnP, vpP, &vnP,
-                     user_data);
+
+        /* get the exact plus and minus side values */
+
+        /* making the uid negative just signals to the user defined lua routine
+         * to do the plus and not minus side values (since plus and minus side
+         * gets detected through the normal, but we want to the traction and
+         * velocity to be rotated with the minus normal
+         */
+        user_bc_func(-sub_g->base.uid, t, xG, nM, exact_TpP, &exact_TnP,
+                     exact_vpP, &exact_vnP, user_data);
+        user_bc_func(sub_g->base.uid, t, xG, nM, exact_TpM, &exact_TnM,
+                     exact_vpM, &exact_vnM, user_data);
+
+        /* The exact traction on the fault is taken to be the sum of the plus
+         * and minus side tractions, so we add the plus tractions to the minus
+         * and the minus to the plus as a side dependent load
+         */
+        for (bfam_locidx_t n = 0; n < 3; n++)
+        {
+          TpP[n] -= exact_TpP[n];
+          TpP[n] += exact_TpM[n];
+
+          vpP[n] -= exact_vpP[n];
+          vpP[n] += exact_vpM[n];
+        }
+        TnP -= exact_TnP;
+        TnP += exact_TnM;
+
+        vnP -= exact_vnP;
+        vnP += exact_vnM;
 
         /* compute the flux assume a locked fault */
         beard_dgx_upwind_state_m(&TnS_g[pnt], &TpS_g[3 * pnt], &vnS_g[pnt],
@@ -2398,18 +2436,8 @@ void beard_dgx_inter_rhs_ageing_law_interface(
                                  vpM, vpP, ZpM, ZpP, ZsM, ZsP);
       }
       else
+#endif
       {
-        /* now add the real flux */
-        /* Setup stuff for the plus side */
-        bfam_real_t ZsP = Zs_P[iG];
-        bfam_real_t ZpP = Zp_P[iG];
-
-        bfam_real_t TpP[] = {Tp1_P[iG], Tp2_P[iG], Tp3_P[iG]};
-        bfam_real_t TnP = Tn_P[iG];
-
-        bfam_real_t vpP[] = {vp1_P[iG], vp2_P[iG], vp3_P[iG]};
-        bfam_real_t vnP = vn_P[iG];
-
         /* compute the flux assume a locked fault */
         beard_dgx_upwind_state_m(&TnS_g[pnt], &TpS_g[3 * pnt], &vnS_g[pnt],
                                  &vpS_g[3 * pnt], TnM, TnP, TpM, TpP, vnM, vnP,
