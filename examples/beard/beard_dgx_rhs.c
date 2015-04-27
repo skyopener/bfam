@@ -2429,60 +2429,43 @@ void beard_dgx_inter_rhs_ageing_law_interface(
 
         vnP -= exact_vnP;
         vnP += exact_vnM;
-
-        /* compute the flux assume a locked fault */
-        beard_dgx_upwind_state_m(&TnS_g[pnt], &TpS_g[3 * pnt], &vnS_g[pnt],
-                                 &vpS_g[3 * pnt], TnM, TnP, TpM, TpP, vnM, vnP,
-                                 vpM, vpP, ZpM, ZpP, ZsM, ZsP);
       }
-      else
 #endif
-      {
-        /* compute the flux assume a locked fault */
-        beard_dgx_upwind_state_m(&TnS_g[pnt], &TpS_g[3 * pnt], &vnS_g[pnt],
-                                 &vpS_g[3 * pnt], TnM, TnP, TpM, TpP, vnM, vnP,
-                                 vpM, vpP, ZpM, ZpP, ZsM, ZsP);
+      /* compute the flux assume a locked fault */
+      beard_dgx_upwind_state_m(&TnS_g[pnt], &TpS_g[3 * pnt], &vnS_g[pnt],
+                               &vpS_g[3 * pnt], TnM, TnP, TpM, TpP, vnM, vnP,
+                               vpM, vpP, ZpM, ZpP, ZsM, ZsP);
 
-        /* We add pf since our normal stress is negative in compression */
-        Tn[iG] = TnS_g[pnt] + Tn_0[iG] + pf_0[iG];
-        if (NO_OPENING && Tn[iG] > 0)
-        {
-          BFAM_LOAD_FIELD_RESTRICT_ALIGNED(x, "", "_grid_x0", fields_g);
-          BFAM_LOAD_FIELD_RESTRICT_ALIGNED(y, "", "_grid_x1", fields_g);
+      /* We add pf since our normal stress is negative in compression */
+      Tn[iG] = TnS_g[pnt] + Tn_0[iG] + pf_0[iG];
+      if (NO_OPENING && Tn[iG] > 0)
+      {
+        BFAM_LOAD_FIELD_RESTRICT_ALIGNED(x, "", "_grid_x0", fields_g);
+        BFAM_LOAD_FIELD_RESTRICT_ALIGNED(y, "", "_grid_x1", fields_g);
 #if DIM == 2
-          BFAM_ABORT("fault opening not implemented: point"
-                     " %" BFAM_REAL_FMTe " %" BFAM_REAL_FMTe,
-                     x[iG], y[iG]);
+        BFAM_ABORT("fault opening not implemented: point"
+                   " %" BFAM_REAL_FMTe " %" BFAM_REAL_FMTe,
+                   x[iG], y[iG]);
 #elif DIM == 3
-          BFAM_LOAD_FIELD_RESTRICT_ALIGNED(z, "", "_grid_x2", fields_g);
-          BFAM_ABORT("fault opening not implemented: point"
-                     " %" BFAM_REAL_FMTe " %" BFAM_REAL_FMTe
-                     " %" BFAM_REAL_FMTe,
-                     x[iG], y[iG], z[iG]);
+        BFAM_LOAD_FIELD_RESTRICT_ALIGNED(z, "", "_grid_x2", fields_g);
+        BFAM_ABORT("fault opening not implemented: point"
+                   " %" BFAM_REAL_FMTe " %" BFAM_REAL_FMTe " %" BFAM_REAL_FMTe,
+                   x[iG], y[iG], z[iG]);
 #else
 #error "invalid DIM"
 #endif
-        }
+      }
 
-/*
- * Call bracketed Newton solver to solve:
- *    Slock - eta*V = N*f(V,psi)
- * where eta = 2/(1/ZsP+1/ZsM)
- */
-#if 0
-      const bfam_real_t Slock2 =
-        + (TpS_g[3*pnt+0] + Tp1_0[iG])*(TpS_g[3*pnt+0] + Tp1_0[iG])
-        + (TpS_g[3*pnt+1] + Tp2_0[iG])*(TpS_g[3*pnt+1] + Tp2_0[iG])
-        + (TpS_g[3*pnt+2] + Tp3_0[iG])*(TpS_g[3*pnt+2] + Tp3_0[iG]);
+      /*
+       * Call bracketed Newton solver to solve:
+       *    Slock - eta*V = N*f(V,psi)
+       * where eta = 2/(1/ZsP+1/ZsM)
+       */
 
-      fc[iG] = fs[iG]-(fs[iG]-fd[iG])*BFAM_MIN(Dp[iG],Dc[iG])/Dc[iG];
-      const bfam_real_t Sfric = c0[iG]-Tn[iG]*fc[iG];
-      const bfam_real_t Sfric = 0;
-#endif
-
+      if (!user_bc_func)
+      {
         bfam_real_t VpS[3];
         const bfam_real_t Tp0[] = {Tp1_0[iG], Tp2_0[iG], Tp3_0[iG]};
-
         beard_dgx_upwind_state_rate_and_state_friction_m(
             &TpS_g[3 * pnt], &vpS_g[3 * pnt], VpS, Tn[pnt], a[iG], V0[iG],
             psi[iG], TpM, TpP, Tp0, vpM, vpP, ZsM, ZsP);
@@ -2492,24 +2475,24 @@ void beard_dgx_inter_rhs_ageing_law_interface(
         Vp3[iG] = VpS[2];
         V[iG] =
             BFAM_REAL_SQRT(VpS[0] * VpS[0] + VpS[1] * VpS[1] + VpS[2] * VpS[2]);
-
-        dDn[iG] += 0;
-        dDp[iG] += V[iG];
-        dDp1[iG] += Vp1[iG];
-        dDp2[iG] += Vp2[iG];
-        dDp3[iG] += Vp3[iG];
-        Tp1[iG] = TpS_g[3 * pnt + 0] + Tp1_0[iG];
-        Tp2[iG] = TpS_g[3 * pnt + 1] + Tp2_0[iG];
-        Tp3[iG] = TpS_g[3 * pnt + 2] + Tp3_0[iG];
-
-        if (b[iG] > 0)
-        {
-          const bfam_real_t theta =
-              (L[iG] / V0[iG]) * BFAM_REAL_EXP((psi[iG] - f0[iG]) / b[iG]);
-          dpsi[iG] += b[iG] * (1.0 / theta - V[iG] / L[iG]);
-        }
-        /* dpsi[iG] += (b[iG]/theta)*(1-V[iG]*theta/L[iG]); */
       }
+
+      dDn[iG] += 0;
+      dDp[iG] += V[iG];
+      dDp1[iG] += Vp1[iG];
+      dDp2[iG] += Vp2[iG];
+      dDp3[iG] += Vp3[iG];
+      Tp1[iG] = TpS_g[3 * pnt + 0] + Tp1_0[iG];
+      Tp2[iG] = TpS_g[3 * pnt + 1] + Tp2_0[iG];
+      Tp3[iG] = TpS_g[3 * pnt + 2] + Tp3_0[iG];
+
+      if (b[iG] > 0)
+      {
+        const bfam_real_t theta =
+            (L[iG] / V0[iG]) * BFAM_REAL_EXP((psi[iG] - f0[iG]) / b[iG]);
+        dpsi[iG] += b[iG] * (1.0 / theta - V[iG] / L[iG]);
+      }
+      /* dpsi[iG] += (b[iG]/theta)*(1-V[iG]*theta/L[iG]); */
 
       /* substract off the grid values */
       TpS_g[3 * pnt + 0] -= TpM[0];
