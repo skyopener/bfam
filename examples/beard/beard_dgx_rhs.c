@@ -264,13 +264,12 @@ static inline bfam_locidx_t beard_dgx_rs_arcsinh_newton(
   bfam_real_t V = *V_ptr;
   bfam_real_t Vmin = 0;
   bfam_real_t Vmax = phi / eta;
+  const bfam_real_t A = BFAM_REAL_EXP(psi / a) / (2 * V0);
 
   if (V < Vmin)
     V = Vmin;
   else if (V > Vmax)
     V = Vmax;
-
-  const bfam_real_t A = BFAM_REAL_EXP(psi / a) / (2 * V0);
 
   /* Compute the initial function value */
   bfam_real_t G = phi - eta * V + Tn * a * BFAM_REAL_ASINH(A * V);
@@ -410,20 +409,14 @@ static inline void beard_dgx_upwind_state_rate_and_state_friction_m(
     /* initialize V to the difference of nodal values */
     V = V + (vpp[i] - vpm[i]) * (vpp[i] - vpm[i]);
     T = T + (Tpm[i] + Tp0m[i]) * (Tpm[i] + Tp0m[i]);
-    // BFAM_INFO(">>> %e",Tpm[i]+Tp0m[i]);
   }
   phi_m = BFAM_REAL_SQRT(phi_m);
   V = BFAM_REAL_SQRT(V);
   T = BFAM_REAL_SQRT(T);
 
-  // BFAM_INFO(">>> %e %e",T,psi);
-
-  // const bfam_locidx_t ret_val = beard_dgx_rs_arcsinh_newton(
-  //     &V, &T, eta, phi_m, a, psi, Tn, V0, MAX_ITER, FTOL, ATOL, RTOL);
-  // BFAM_ABORT_IF(ret_val, "newton solver returned %" BFAM_LOCIDX_PRId,
-  // ret_val);
-  V = phi_m / (1 + eta);
-  T = psi;
+  const bfam_locidx_t ret_val = beard_dgx_rs_arcsinh_newton(
+      &V, &T, eta, phi_m, a, psi, Tn, V0, MAX_ITER, FTOL, ATOL, RTOL);
+  BFAM_ABORT_IF(ret_val, "newton solver returned %" BFAM_LOCIDX_PRId, ret_val);
 
   // bfam_real_t tmp = 0;
   // bfam_real_t vmp = 0;
@@ -2390,6 +2383,8 @@ void beard_dgx_inter_rhs_ageing_law_interface(
       bfam_real_t vpP[] = {vp1_P[iG], vp2_P[iG], vp3_P[iG]};
       bfam_real_t vnP = vn_P[iG];
 
+      const bfam_real_t Tp0[] = {Tp1_0[iG], Tp2_0[iG], Tp3_0[iG]};
+
 #ifndef NO_MMS
       bfam_real_t exact_TpP[3];
       bfam_real_t exact_TnP;
@@ -2410,7 +2405,6 @@ void beard_dgx_inter_rhs_ageing_law_interface(
 
       const bfam_real_t nM[] = {n1_g[iG], n2_g[iG], BEARD_D3_AP(0, +n3_g[iG])};
 
-      const bfam_real_t Tp0[] = {Tp1_0[iG], Tp2_0[iG], Tp3_0[iG]};
       if (user_bc_func)
       {
         const bfam_real_t xG[] = {x1_g[iG], x2_g[iG],
@@ -2421,7 +2415,7 @@ void beard_dgx_inter_rhs_ageing_law_interface(
         /* making the uid negative just signals to the user defined lua routine
          * to do the plus and not minus side values (since plus and minus side
          * gets detected through the normal, but we want to the traction and
-         * velocity to be rotated with the minus normal
+         * velocity to be rotated with the minus normal)
          */
         user_bc_func(-sub_g->base.uid, t, xG, nM, exact_TpP, &exact_TnP,
                      exact_vpP, &exact_vnP, user_data);
@@ -2473,7 +2467,9 @@ void beard_dgx_inter_rhs_ageing_law_interface(
         vnP += exact_vnM;
 #endif
       }
-#endif
+#else
+      BFAM_ASSERT(!user_bc_func);
+#endif /* NO_MMS */
 
       /* compute the flux assume a locked fault */
       beard_dgx_upwind_state_m(&TnS_g[pnt], &TpS_g[3 * pnt], &vnS_g[pnt],
@@ -2502,17 +2498,18 @@ void beard_dgx_inter_rhs_ageing_law_interface(
 
       bfam_real_t VpS[3];
 
-      /*
-       * Call bracketed Newton solver to solve:
-       *    Slock - eta*V = N*f(V,psi)
-       * where eta = 2/(1/ZsP+1/ZsM)
-       */
+/*
+ * Call bracketed Newton solver to solve:
+ *    Slock - eta*V = N*f(V,psi)
+ * where eta = 2/(1/ZsP+1/ZsM)
+ */
+#ifndef NO_MMS
       if (user_bc_func)
       {
         /* compute the exact state variable */
         bfam_real_t Vs = 0;
         bfam_real_t Tps = 0;
-        bfam_real_t Tns = exact_TnP + exact_TnM + Tn_0[iG] + pf_0[iG];
+        bfam_real_t Tns = exact_TnM + Tn_0[iG] + pf_0[iG];
         for (bfam_locidx_t n = 0; n < 3; n++)
         {
           Vs += exact_V[n] * exact_V[n];
@@ -2520,9 +2517,8 @@ void beard_dgx_inter_rhs_ageing_law_interface(
         }
         Vs = BFAM_REAL_SQRT(Vs);
         Tps = BFAM_REAL_SQRT(Tps);
-        psi[iG] =
-            BFAM_REAL_LOG((2 / Vs) * BFAM_REAL_SINH(Tps / (-a[iG] * Tns)));
-        psi[iG] = Tps;
+        psi[iG] = BFAM_REAL_LOG((2 * V0[iG] / Vs) *
+                                BFAM_REAL_SINH(Tps / (-a[iG] * Tns)));
 
         const bfam_real_t Tp0m[] = {exact_Tp[0] + exact_TpM[0],
                                     exact_Tp[1] + exact_TpM[1],
@@ -2536,6 +2532,7 @@ void beard_dgx_inter_rhs_ageing_law_interface(
             psi[iG], TpM, TpP, Tp0m, Tp0p, vpM, vpP, ZsM, ZsP);
       }
       else
+#endif
       {
         beard_dgx_upwind_state_rate_and_state_friction_m(
             &TpS_g[3 * pnt], &vpS_g[3 * pnt], VpS, Tn[iG], a[iG], V0[iG],
