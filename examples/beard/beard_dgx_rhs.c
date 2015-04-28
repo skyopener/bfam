@@ -2401,8 +2401,16 @@ void beard_dgx_inter_rhs_ageing_law_interface(
       bfam_real_t exact_vpM[3];
       bfam_real_t exact_vnM;
 
+      /* direction of the traction and velocity (which is taken to be parallel
+       * to the slip velocity
+       */
+      bfam_real_t exact_U[3];
+      bfam_real_t exact_V[3];
+      bfam_real_t exact_Tp[3];
+
       const bfam_real_t nM[] = {n1_g[iG], n2_g[iG], BEARD_D3_AP(0, +n3_g[iG])};
 
+      const bfam_real_t Tp0[] = {Tp1_0[iG], Tp2_0[iG], Tp3_0[iG]};
       if (user_bc_func)
       {
         const bfam_real_t xG[] = {x1_g[iG], x2_g[iG],
@@ -2420,11 +2428,36 @@ void beard_dgx_inter_rhs_ageing_law_interface(
         user_bc_func(sub_g->base.uid, t, xG, nM, exact_TpM, &exact_TnM,
                      exact_vpM, &exact_vnM, user_data);
 
-/* The exact traction on the fault is taken to be the sum of the plus
- * and minus side tractions, so we add the plus tractions to the minus
- * and the minus to the plus as a side dependent load
- */
+        /* Compute the direction that we will have the traction and slip
+         * velocity will operate (we have to choose the load so that they are
+         * parallel per the friction law)
+         *
+         * We set the direction based on the exact slip velocity and the
+         * magnitude based on the sum of the user set load and the tractions on
+         * either side of the fault
+         */
+        bfam_real_t U = 0;
+        bfam_real_t Tp = 0;
+        for (bfam_locidx_t n = 0; n < 3; n++)
+        {
+          exact_Tp[n] = -exact_TpM[n] + exact_TpP[n] + Tp0[n];
+          exact_V[n] = exact_vpP[n] - exact_vpM[n];
+          U += exact_V[n] * exact_V[n];
+          Tp += exact_Tp[n] * exact_Tp[n];
+        }
+        U = BFAM_REAL_SQRT(U);
+        BFAM_ABORT_IF_NOT(U > 0, "must have a non-zero slip velocity");
+        for (bfam_locidx_t n = 0; n < 3; n++)
+        {
+          exact_U[n] = exact_V[n] / U;
+          exact_Tp[n] = exact_U[n] * Tp;
+        }
+
 #if 0
+        /* The exact traction on the fault is taken to be the sum of the plus
+         * and minus side tractions, so we add the plus tractions to the minus
+         * and the minus to the plus as a side dependent load
+         */
         for (bfam_locidx_t n = 0; n < 3; n++)
         {
           TpP[n] -= exact_TpP[n];
@@ -2441,6 +2474,7 @@ void beard_dgx_inter_rhs_ageing_law_interface(
 #endif
       }
 #endif
+
       /* compute the flux assume a locked fault */
       beard_dgx_upwind_state_m(&TnS_g[pnt], &TpS_g[3 * pnt], &vnS_g[pnt],
                                &vpS_g[3 * pnt], TnM, TnP, TpM, TpP, vnM, vnP,
@@ -2473,19 +2507,16 @@ void beard_dgx_inter_rhs_ageing_law_interface(
        *    Slock - eta*V = N*f(V,psi)
        * where eta = 2/(1/ZsP+1/ZsM)
        */
-      const bfam_real_t Tp0[] = {Tp1_0[iG], Tp2_0[iG], Tp3_0[iG]};
       if (user_bc_func)
       {
-        // BFAM_INFO("::::::::::::::::::::::::::::::::::");
         /* compute the exact state variable */
         bfam_real_t Vs = 0;
         bfam_real_t Tps = 0;
         bfam_real_t Tns = exact_TnP + exact_TnM + Tn_0[iG] + pf_0[iG];
         for (bfam_locidx_t n = 0; n < 3; n++)
         {
-          Vs += (exact_vpP[n] - exact_vpM[n]) * (exact_vpP[n] - exact_vpM[n]);
-          Tps += (-exact_TpM[n] + exact_TpP[n] + Tp0[n]) *
-                 (-exact_TpM[n] + exact_TpP[n] + Tp0[n]);
+          Vs += exact_V[n] * exact_V[n];
+          Tps += exact_Tp[n] * exact_Tp[n];
         }
         Vs = BFAM_REAL_SQRT(Vs);
         Tps = BFAM_REAL_SQRT(Tps);
@@ -2493,20 +2524,16 @@ void beard_dgx_inter_rhs_ageing_law_interface(
             BFAM_REAL_LOG((2 / Vs) * BFAM_REAL_SINH(Tps / (-a[iG] * Tns)));
         psi[iG] = Tps;
 
-        const bfam_real_t Tp0m[] = {Tp0[0] + exact_TpP[0],
-                                    Tp0[1] + exact_TpP[1],
-                                    Tp0[2] + exact_TpP[2]};
-        const bfam_real_t Tp0p[] = {Tp0[0] + exact_TpM[0],
-                                    Tp0[1] + exact_TpM[1],
-                                    Tp0[2] + exact_TpM[2]};
+        const bfam_real_t Tp0m[] = {exact_Tp[0] + exact_TpM[0],
+                                    exact_Tp[1] + exact_TpM[1],
+                                    exact_Tp[2] + exact_TpM[2]};
+        const bfam_real_t Tp0p[] = {exact_Tp[0] + exact_TpP[0],
+                                    exact_Tp[1] + exact_TpP[1],
+                                    exact_Tp[2] + exact_TpP[2]};
 
         beard_dgx_upwind_state_rate_and_state_friction_m(
             &TpS_g[3 * pnt], &vpS_g[3 * pnt], VpS, Tn[pnt], a[iG], V0[iG],
             psi[iG], TpM, TpP, Tp0m, Tp0p, vpM, vpP, ZsM, ZsP);
-        // BFAM_INFO("");
-
-        // for(bfam_locidx_t n = 0; n < 3; n++)
-        //   BFAM_INFO("%e %e", TpM[n], TpS_g[3*pnt+n]);
       }
       else
       {
@@ -2633,7 +2660,6 @@ void beard_dgx_inter_rhs_ageing_law_interface(
                          JI[iM], wi[0]);
     }
   }
-  // BFAM_ABORT("STOP");
 }
 
 void beard_dgx_energy(int inN, bfam_real_t *energy_sq,
