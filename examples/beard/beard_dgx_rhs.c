@@ -2532,13 +2532,13 @@ void beard_dgx_inter_rhs_ageing_law_interface(
                                     exact_Tp[2] + exact_TpP[2]};
 
         beard_dgx_upwind_state_rate_and_state_friction_m(
-            &TpS_g[3 * pnt], &vpS_g[3 * pnt], VpS, Tn[pnt], a[iG], V0[iG],
+            &TpS_g[3 * pnt], &vpS_g[3 * pnt], VpS, Tn[iG], a[iG], V0[iG],
             psi[iG], TpM, TpP, Tp0m, Tp0p, vpM, vpP, ZsM, ZsP);
       }
       else
       {
         beard_dgx_upwind_state_rate_and_state_friction_m(
-            &TpS_g[3 * pnt], &vpS_g[3 * pnt], VpS, Tn[pnt], a[iG], V0[iG],
+            &TpS_g[3 * pnt], &vpS_g[3 * pnt], VpS, Tn[iG], a[iG], V0[iG],
             psi[iG], TpM, TpP, Tp0, Tp0, vpM, vpP, ZsM, ZsP);
       }
 
